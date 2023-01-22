@@ -13,5 +13,9 @@ export const getAbiReserve = (reserves, reserve) => {
   })[0].abi;
 }
 
+export const sleep = (ms) => {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 
 

@@ -7,6 +7,7 @@ import { setGlobals } from './globals';
 import { liquidate } from './liquidation/liquidation';
 import { getGas,gas_cost } from './utils/gas'
 import { fetchV2UnhealthyLoans } from './v2liquidation';
+import { sleep } from './utils/utils'
 require('isomorphic-fetch');
 
 /*
@@ -43,6 +44,4 @@ async function delayedFetchUnhealthyLoans(){
 
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+

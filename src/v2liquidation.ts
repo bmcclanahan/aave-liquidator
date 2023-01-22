@@ -2,13 +2,17 @@ import { TOKEN_LIST, APP_CHAIN_ID } from './constants';
 import { ChainId, Token, TokenAmount } from '@uniswap/sdk'
 import { useTradeExactIn } from './uniswap/trades';
 import { gas_cost } from './utils/gas'
+import { sleep } from './utils/utils'
+import axios from 'axios';
 const GAS_USED_ESTIMATE = 1000000
 const FLASH_LOAN_FEE = 0.009
+const fs = require('fs');
 
 
-const theGraphURL_v2_kovan = 'https://api.thegraph.com/subgraphs/name/aave/protocol-v2-kovan'
-const theGraphURL_v2_mainnet = 'https://api.thegraph.com/subgraphs/name/aave/protocol-v2'
-const theGraphURL_v2 = APP_CHAIN_ID == ChainId.MAINNET ? theGraphURL_v2_mainnet : theGraphURL_v2_kovan
+//const theGraphURL_v2_kovan = 'https://api.thegraph.com/subgraphs/name/aave/protocol-v2-kovan'
+//const theGraphURL_v2_mainnet = 'https://api.thegraph.com/subgraphs/name/aave/protocol-v2'
+//const theGraphURL_v2 = APP_CHAIN_ID == ChainId.MAINNET ? theGraphURL_v2_mainnet : theGraphURL_v2_kovan
+const polygonGraphURL = 'https://api.thegraph.com/subgraphs/name/ronlv10/aave-v3-polygon'
 const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
 export var profit_threshold = .1 * (10**18) //in eth. A bonus below this will be ignored
@@ -24,10 +28,9 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_i
   }
   console.log(`${Date().toLocaleString()} fetching unhealthy loans}`)
   while(count < maxCount){
-  fetch(theGraphURL_v2, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: `
+    console.log("processing ", count)
+    axios.post(polygonGraphURL, {
+      query: `
       query GET_LOANS {
         users(first:1000, skip:${1000*count}, orderBy: id, orderDirection: desc, where: {${user_id_query}borrowedReservesCount_gt: 0}) {
           id
@@ -65,21 +68,36 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(user_i
           }
         }
       }`
-    }),
-  })
-  .then(res => res.json())
+    }
+  )
   .then(res => {
-    const total_loans = res.data.users.length
-    const unhealthyLoans=parseUsers(res.data);
+    const total_loans = res.data.data.users.length
+    const result = parseUsers(res.data.data);
+    const unhealthyLoans = result.unhealthyLoans;
+    const all_loans = result.all_loans;
+    console.log(`attempting to write ${all_loans.length} loans`);
+    fs.writeFile(`data/${count}_loan_healths.json`, JSON.stringify(all_loans), (err) => {
+      if (err){
+        console.log(err);
+      }
+      else {
+        console.log(`data/${count}_loan_healths.json written`);
+      }
+    }
+    );
+    console.log("loans written");
     if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans)
     if(total_loans>0) console.log(`Records:${total_loans} Unhealthy:${unhealthyLoans.length}`)
   });
   count++;
+  console.log('sleeping for 5 seconds');
+  await sleep(5000);
   }
 }
 
 function parseUsers(payload) {
   var loans=[];
+  var all_loans=[]; 
   payload.users.forEach((user, i) => {
     var totalBorrowed=0;
     var totalCollateral=0;
@@ -112,24 +130,31 @@ function parseUsers(payload) {
       }
     });
     var healthFactor= totalCollateralThreshold / totalBorrowed;
-
-    if (healthFactor<=healthFactorMax) {
-      loans.push( {
-          "user_id"  :  user.id,
-          "healthFactor"   :  healthFactor,
-          "max_collateralSymbol" : max_collateralSymbol,
-          "max_borrowedSymbol" : max_borrowedSymbol,
-          "max_borrowedPrincipal" : max_borrowedPrincipal,
-          "max_borrowedPriceInEth" : max_borrowedPriceInEth,
-          "max_collateralBonus" : max_collateralBonus/10000,
-          "max_collateralPriceInEth" : max_collateralPriceInEth
-        })
+    var borrowingInfo = {
+      "user_id"  :  user.id,
+      "healthFactor"   :  healthFactor,
+      "max_collateralSymbol" : max_collateralSymbol,
+      "max_borrowedSymbol" : max_borrowedSymbol,
+      "max_borrowedPrincipal" : max_borrowedPrincipal,
+      "max_borrowedPriceInEth" : max_borrowedPriceInEth,
+      "max_collateralBonus" : max_collateralBonus/10000,
+      "max_collateralPriceInEth" : max_collateralPriceInEth,
+      "profit_potentialInEth": TOKEN_LIST[max_borrowedSymbol] ? max_borrowedPrincipal * allowedLiquidation * (max_collateralBonus-1) * max_borrowedPriceInEth / 10 ** TOKEN_LIST[max_borrowedSymbol].decimals : 0
     }
+    if (healthFactor<=healthFactorMax) {
+      loans.push(borrowingInfo)
+    }
+    all_loans.push(borrowingInfo)
+    
   });
 
   //filter out loans under a threshold that we know will not be profitable (liquidation_threshold)
-  loans = loans.filter(loan => loan.max_borrowedPrincipal * allowedLiquidation * (loan.max_collateralBonus-1) * loan.max_borrowedPriceInEth / 10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals >= profit_threshold)
-  return loans;
+  loans = loans.filter(loan => TOKEN_LIST[loan.max_borrowedSymbol]);
+  loans = loans.filter(loan => loan.profit_potentialInEth >= profit_threshold)
+  return {
+    unhealthyLoans: loans,
+    all_loans
+  };
 }
 async function liquidationProfits(loans){
   loans.map(async (loan) => {
@@ -139,39 +164,42 @@ async function liquidationProfits(loans){
 
 async function liquidationProfit(loan){
   //flash loan fee
-  const flashLoanAmount = percentBigInt(BigInt(loan.max_borrowedPrincipal), allowedLiquidation)
-  const flashLoanCost = percentBigInt(flashLoanAmount, FLASH_LOAN_FEE)
+  if(TOKEN_LIST[loan.max_collateralSymbol]){
+    const flashLoanAmount = percentBigInt(BigInt(loan.max_borrowedPrincipal), allowedLiquidation)
+    const flashLoanCost = percentBigInt(flashLoanAmount, FLASH_LOAN_FEE)
 
-  //minimum amount of liquidated coins that will be paid out as profit
-  var flashLoanAmountInEth = flashLoanAmount * BigInt(loan.max_borrowedPriceInEth) / BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)
-  var flashLoanAmountInEth_plusBonus = percentBigInt(flashLoanAmountInEth,loan.max_collateralBonus) //add the bonus
-  var collateralTokensFromPayout  = flashLoanAmountInEth_plusBonus * BigInt(10 ** TOKEN_LIST[loan.max_collateralSymbol].decimals) / BigInt(loan.max_collateralPriceInEth) //this is the amount of tokens that will be received as payment for liquidation and then will need to be swapped back to token of the flashloan
-  var fromTokenAmount = new TokenAmount(TOKEN_LIST[loan.max_collateralSymbol], collateralTokensFromPayout)// this is the number of coins to trade (should have many 0's)
-  var bestTrade = await useTradeExactIn(fromTokenAmount,TOKEN_LIST[loan.max_borrowedSymbol])
+    //minimum amount of liquidated coins that will be paid out as profit
+    var flashLoanAmountInEth = flashLoanAmount * BigInt(loan.max_borrowedPriceInEth) / BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)
+    var flashLoanAmountInEth_plusBonus = percentBigInt(flashLoanAmountInEth,loan.max_collateralBonus) //add the bonus
+    var collateralTokensFromPayout  = flashLoanAmountInEth_plusBonus * BigInt(10 ** TOKEN_LIST[loan.max_collateralSymbol].decimals) / BigInt(loan.max_collateralPriceInEth) //this is the amount of tokens that will be received as payment for liquidation and then will need to be swapped back to token of the flashloan
+    var fromTokenAmount = new TokenAmount(TOKEN_LIST[loan.max_collateralSymbol], collateralTokensFromPayout)// this is the number of coins to trade (should have many 0's)
+    var bestTrade = await useTradeExactIn(fromTokenAmount,TOKEN_LIST[loan.max_borrowedSymbol])
+    //debt tokens after swap
+    var minimumTokensAfterSwap = bestTrade ? (BigInt(bestTrade.outputAmount.numerator) * BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)) / BigInt(bestTrade.outputAmount.denominator) : BigInt(0)
 
-  var minimumTokensAfterSwap = bestTrade ? (BigInt(bestTrade.outputAmount.numerator) * BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)) / BigInt(bestTrade.outputAmount.denominator) : BigInt(0)
+    //total profits (bonus_after_swap - flashLoanCost).to_eth - gasFee
+    var gasFee = gasCostToLiquidate() //calc gas fee
+    console.log("gass fee", gasFee);
+    var flashLoanPlusCost = (flashLoanCost + flashLoanAmount)
+    var profitInBorrowCurrency = minimumTokensAfterSwap - flashLoanPlusCost
+    var profitInEth = profitInBorrowCurrency * BigInt(loan.max_borrowedPriceInEth) / BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)
+    var profitInEthAfterGas = (profitInEth)  - gasFee
 
-  //total profits (bonus_after_swap - flashLoanCost).to_eth - gasFee
-  var gasFee = gasCostToLiquidate() //calc gas fee
-  var flashLoanPlusCost = (flashLoanCost + flashLoanAmount)
-  var profitInBorrowCurrency = minimumTokensAfterSwap - flashLoanPlusCost
-  var profitInEth = profitInBorrowCurrency * BigInt(loan.max_borrowedPriceInEth) / BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)
-  var profitInEthAfterGas = (profitInEth)  - gasFee
-
-  if (profitInEthAfterGas>0.1)
-  {
-    console.log("-------------------------------")
-    console.log(`user_ID:${loan.user_id}`)
-    console.log(`HealthFactor ${loan.healthFactor.toFixed(2)}`)
-    console.log(`flashLoanAmount ${flashLoanAmount} ${loan.max_borrowedSymbol}`)
-    console.log(`flashLoanAmount converted to eth ${flashLoanAmountInEth}`)
-    console.log(`flashLoanAmount converted to eth plus bonus ${flashLoanAmountInEth_plusBonus}`)
-    console.log(`payout in collateral Tokens ${collateralTokensFromPayout} ${loan.max_collateralSymbol}`)
-    console.log(`${loan.max_borrowedSymbol} received from swap ${minimumTokensAfterSwap} ${loan.max_borrowedSymbol}`)
-    bestTrade ? showPath(bestTrade) : console.log("no path")
-    console.log(`flashLoanPlusCost ${flashLoanPlusCost}`)
-    console.log(`gasFee ${gasFee}`)
-    console.log(`profitInEthAfterGas ${Number(profitInEthAfterGas)/(10 ** 18)}eth`)
+    if (profitInEthAfterGas>0.1)
+    {
+      console.log("-------------------------------")
+      console.log(`user_ID:${loan.user_id}`)
+      console.log(`HealthFactor ${loan.healthFactor.toFixed(2)}`)
+      console.log(`flashLoanAmount ${flashLoanAmount} ${loan.max_borrowedSymbol}`)
+      console.log(`flashLoanAmount converted to eth ${flashLoanAmountInEth}`)
+      console.log(`flashLoanAmount converted to eth plus bonus ${flashLoanAmountInEth_plusBonus}`)
+      console.log(`payout in collateral Tokens ${collateralTokensFromPayout} ${loan.max_collateralSymbol}`)
+      console.log(`${loan.max_borrowedSymbol} received from swap ${minimumTokensAfterSwap} ${loan.max_borrowedSymbol}`)
+      bestTrade ? showPath(bestTrade) : console.log("no path")
+      console.log(`flashLoanPlusCost ${flashLoanPlusCost}`)
+      console.log(`gasFee ${gasFee}`)
+      console.log(`profitInEthAfterGas ${Number(profitInEthAfterGas)/(10 ** 18)}eth`)
+    }
   }
     //console.log(`user_ID:${loan.user_id} HealthFactor ${loan.healthFactor.toFixed(2)} allowedLiquidation ${flashLoanAmount.toFixed(2)} ${loan.max_collateralSymbol}->${loan.max_borrowedSymbol}` )
     //console.log(`minimumTokensAfterSwap ${minimumTokensAfterSwap} flashLoanCost ${flashLoanCost} gasFee ${gasFee} profit ${profit.toFixed(2)}`)
