@@ -65,6 +65,7 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
               eMode {
                 id
                 liquidationThreshold
+                liquidationBonus
               }
             }
           }
@@ -107,7 +108,7 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
 
     await analyzeUnhealthy(
       uiPoolDataProviderContract, poolAddressProvider,
-      all_loans.filter(x => x.healthFactor < 1.5), eth_price
+      all_loans.filter(x => x.healthFactor < 1.0), eth_price
     );
     count++;
     console.log('sleeping for 5 seconds');
@@ -170,7 +171,13 @@ function parseUsers(payload) {
       }
       if (collateralReserve.reserve.reserveLiquidationBonus > max_collateralBonus){
         max_collateralSymbol = collateralReserve.reserve.symbol
-        max_collateralBonus=collateralReserve.reserve.reserveLiquidationBonus
+        if(user.eModeCategoryId && collateralReserve.reserve.eMode && user.eModeCategoryId.id == collateralReserve.reserve.eMode.id){
+          max_collateralBonus=collateralReserve.reserve.eMode.liquidationBonus
+        }
+        else {
+          max_collateralBonus=collateralReserve.reserve.reserveLiquidationBonus
+        }
+        
         max_collateralPriceInEth = priceInEth
       }
       // if (user.id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
@@ -360,7 +367,8 @@ async function analyzeUnhealthy(
           decimals: reserve.reserve.decimals,
           eMode: reserve.reserve.eModeCategoryId ? {
             id: reserve.reserve.eModeCategoryId,
-            liquidationThreshold: reserve.reserve.eModeLiquidationThreshold
+            liquidationThreshold: reserve.reserve.eModeLiquidationThreshold,
+            liquidationBonus: reserve.reserve.eModeLiquidationBonus
           }: undefined
         }
       }
@@ -399,10 +407,10 @@ async function analyzeUnhealthy(
       "graph health factor: ", loan.healthFactor.toFixed(2),
       "contract health factor: ", parseFloat(userData.healthFactor).toFixed(2),
       "updated contract health factor", result.all_loans[0].healthFactor.toFixed(2),
-      "potential profit: $", (loan.profit_potentialInEth * eth_price / 10 ** 18).toFixed(2),
-      "total collateral: ", loan.total_collateral,
-      "total collateral threshold", loan.total_collateral_threshold,
-      "total borrowed: ", loan.total_borrowed
+      "potential profit: $", (loan.profit_potentialInEth * eth_price / 10 ** 18),
+      //"total collateral: ", loan.total_collateral,
+      //"total collateral threshold", loan.total_collateral_threshold,
+      //"total borrowed: ", loan.total_borrowed
     )
 
     // if(loan.user_id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
