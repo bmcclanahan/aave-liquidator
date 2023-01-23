@@ -145,9 +145,6 @@ function parseUsers(payload) {
       //console.log('borrow reserev ', borrowReserve)
       var priceInEth= borrowReserve.reserve.price.priceInEth
       var principalBorrowed = borrowReserve.currentTotalDebt
-      if (user.id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
-        console.log('total borrowed ', priceInEth, principalBorrowed)
-      }
       //console.log('borrow add ', priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals))
       totalBorrowed += priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals)
       if (principalBorrowed> max_borrowedPrincipal){
@@ -177,6 +174,10 @@ function parseUsers(payload) {
         max_collateralBonus=collateralReserve.reserve.reserveLiquidationBonus
         max_collateralPriceInEth = priceInEth
       }
+      // if (user.id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
+      //   console.log('total borrowed ', totalBorrowed, totalCollateral, totalCollateralThreshold, totalCollateralThreshold/totalCollateral)
+      //   console.log('boolean ', user.eModeCategoryId, collateralReserve.reserve.eMode)
+      // }
     });
     //console.log("HF ", totalCollateralThreshold, totalBorrowed)
     var healthFactor= totalCollateralThreshold  / totalBorrowed;
@@ -330,6 +331,11 @@ async function analyzeUnhealthy(
       formattedReserves,
       userEmodeCategoryId: userEmodeCategoryId,
     });
+
+    // if (loan.user_id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
+    //   console.log('user data ', userData)
+
+    // }
     
     //format object to send the parseUser function to compute current healthFactor related and needed data.
     const reservesReformatted = userData.userReservesData.map((reserve) => {
@@ -340,7 +346,6 @@ async function analyzeUnhealthy(
         currentATokenBalance: parseFloat(reserve.underlyingBalance) * 10 ** reserve.reserve.decimals,
         //currentTotalDebt: (parseFloat(reserve.stableBorrowsMarketReferenceCurrency) + parseFloat(reserve.variableBorrowsMarketReferenceCurrency))* 10 ** reserve.reserve.decimals,
         //currentATokenBalance: parseFloat(reserve.underlyingBalanceMarketReferenceCurrency) * 10 ** reserve.reserve.decimals,
-        eModeCategoryId: userData.eModeCategoryId? {id: userData.eModeCategoryId} : undefined,
         reserve: {
           usageAsCollateralEnabled: reserve.reserve.usageAsCollateralEnabled,
           reserveLiquidationThreshold: parseFloat(reserve.reserve.reserveLiquidationThreshold.toString()) ,
@@ -371,7 +376,8 @@ async function analyzeUnhealthy(
           collateralReserve: reservesReformatted.filter(
             x => parseFloat(x.currentATokenBalance) > 0
           ),
-          id: loan.user_id
+          id: loan.user_id,
+          eModeCategoryId: userEmodeCategoryId? {id: userEmodeCategoryId} : undefined
         }
       ],
       
@@ -397,13 +403,13 @@ async function analyzeUnhealthy(
       "potential profit: $", (loan.profit_potentialInEth * eth_price / 10 ** 18).toFixed(2),
       "total collateral: ", loan.total_collateral,
       "total collateral threshold", loan.total_collateral_threshold,
-      "total borrowed: ", loan.total_borrowed
+      "total borrowed: ", loan.total_borrowe
     )
 
-    if(loan.user_id == '0xfa59336cfb8df4f4ef08a5a0e724f09eb64e6742'){
-        console.log("borrows", userDataReformatted.users[0].borrowReserve.length, userDataReformatted.users[0].borrowReserve, userDataReformatted.users[0].borrowReserve[0].reserve.price)
+    // if(loan.user_id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
+    //     console.log("borrows", userDataReformatted.users[0].borrowReserve.length, userDataReformatted.users[0].borrowReserve, userDataReformatted.users[0].borrowReserve[0].reserve.price)
         
-        console.log("collateral", userDataReformatted.users[0].collateralReserve.length, userDataReformatted.users[0].collateralReserve, userDataReformatted.users[0].collateralReserve[0].reserve.price)
-    }
+    //     console.log("collateral", userDataReformatted.users[0].collateralReserve.length, userDataReformatted.users[0].collateralReserve, userDataReformatted.users[0].collateralReserve[0].reserve.price)
+    // }
   }
 }
