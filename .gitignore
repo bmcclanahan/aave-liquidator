@@ -128,7 +128,7 @@ dist
 # TernJS port file
 .tern-port
 
-.DS_Store
+.DS_Store/
 src/.DS_Store
 
 # Stores VSCode versions used for testing VSCode extensions
