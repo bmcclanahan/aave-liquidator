@@ -103,7 +103,6 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
     console.log("loans written");
     if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans);
     if(total_loans>0) console.log(`Records:${total_loans} Unhealthy:${unhealthyLoans.length}`);
-    console.log("spot check ", all_loans.find(x => x.user_id === '0xfe5fe18e658a9b63bdedfd602b8e079b4ed4eece'))
     console.log("analyzing unhealthy loans");
 
     await analyzeUnhealthy(
@@ -403,7 +402,7 @@ async function analyzeUnhealthy(
       "potential profit: $", (loan.profit_potentialInEth * eth_price / 10 ** 18).toFixed(2),
       "total collateral: ", loan.total_collateral,
       "total collateral threshold", loan.total_collateral_threshold,
-      "total borrowed: ", loan.total_borrowe
+      "total borrowed: ", loan.total_borrowed
     )
 
     // if(loan.user_id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
