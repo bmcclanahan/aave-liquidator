@@ -141,16 +141,18 @@ function parseUsers(payload) {
     var max_collateralBonus=0;
     var max_collateralPriceInEth = 0;
     var total_liquidiationThreshold = 0;
+    var max_borrowedDecimals;
     user.borrowReserve.forEach((borrowReserve, i) => {
       //console.log('borrow reserev ', borrowReserve)
-      var priceInEth= borrowReserve.reserve.price.priceInEth
+      var priceInEth= borrowReserve.reserve.price.priceInEth // priceInEth really appears to be price in  USD * 10 ** 8
       var principalBorrowed = borrowReserve.currentTotalDebt
       //console.log('borrow add ', priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals))
-      totalBorrowed += priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals)
+      totalBorrowed += priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals) // total borrowed in USD * 10 ** 8 it appears
       if (principalBorrowed> max_borrowedPrincipal){
         max_borrowedSymbol = borrowReserve.reserve.symbol
         max_borrowedPrincipal = principalBorrowed
         max_borrowedPriceInEth = priceInEth
+        max_borrowedDecimals = borrowReserve.reserve.decimals
       }
     });
     user.collateralReserve.forEach((collateralReserve, i) => {
@@ -194,12 +196,14 @@ function parseUsers(payload) {
       "max_borrowedSymbol" : max_borrowedSymbol,
       "max_borrowedPrincipal" : max_borrowedPrincipal,
       "max_borrowedPriceInEth" : max_borrowedPriceInEth,
+      "max_borrowedDecimals": max_borrowedDecimals,
       "max_collateralBonus" : max_collateralBonus/10000,
       "max_collateralPriceInEth" : max_collateralPriceInEth,
       "total_collateral": totalCollateral,
       "total_collateral_threshold": totalCollateralThreshold,
-      "total_borrowed":  totalBorrowed,
-      "profit_potentialInEth": TOKEN_LIST[max_borrowedSymbol] ? max_borrowedPrincipal * allowedLiquidation * (max_collateralBonus-1) * max_borrowedPriceInEth / 10 ** TOKEN_LIST[max_borrowedSymbol].decimals : 0
+      "total_borrowed":  totalBorrowed, //! double check profit calculation,
+      //"profit_potentialInEth": TOKEN_LIST[max_borrowedSymbol] ? max_borrowedPrincipal * allowedLiquidation * (max_collateralBonus-1) * max_borrowedPriceInEth / 10 ** TOKEN_LIST[max_borrowedSymbol].decimals : 0
+      "profit_potentialInDollars": max_borrowedSymbol && max_borrowedDecimals ? max_borrowedPrincipal * allowedLiquidation * (max_collateralBonus/10000-1) * max_borrowedPriceInEth / 10 ** (max_borrowedDecimals + 8) : 0
     }
     if (healthFactor<=healthFactorMax) {
       loans.push(borrowingInfo)
@@ -399,6 +403,7 @@ async function analyzeUnhealthy(
     
     
     //console.log("formatted user data ", userSummary)
+    
 
     //const userData = await poolContract.getUserAccountData(user);
     //console.log("userData ", userData);
@@ -407,10 +412,14 @@ async function analyzeUnhealthy(
       "graph health factor: ", loan.healthFactor.toFixed(2),
       "contract health factor: ", parseFloat(userData.healthFactor).toFixed(2),
       "updated contract health factor", result.all_loans[0].healthFactor.toFixed(2),
-      "potential profit: $", (loan.profit_potentialInEth * eth_price / 10 ** 18),
+      "potential profit: $", loan.profit_potentialInDollars, // priceInEth really appears to be price in  USD * 10 ** 8
+      "collateral bonus: ", loan.max_collateralBonus,
+      "max borrowed principal: ", loan.max_borrowedPrincipal / 10 ** loan.max_borrowedDecimals,
+      "max borrowed price in eth: ", loan.max_borrowedPriceInEth,
+      "max borrowed symbol: ", loan.max_borrowedSymbol
       //"total collateral: ", loan.total_collateral,
       //"total collateral threshold", loan.total_collateral_threshold,
-      //"total borrowed: ", loan.total_borrowed
+      //"total borrowed: ", loan.total_borrowedloan
     )
 
     // if(loan.user_id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
