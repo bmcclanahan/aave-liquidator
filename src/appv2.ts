@@ -38,13 +38,13 @@ async function delayedFetchUnhealthyLoans(){
   //var fromTokenAmount = new TokenAmount(TOKEN_LIST["WBTC"], 1000)// this is the number of coins to trade (should have many 0's)
   //console.log (JSON.stringify(useTradeExactIn(fromTokenAmount,TOKEN_LIST["ZRX"]), null, 2))
   //fetchV2UnhealthyLoans("0xfe206f90c58feb8e42474c5074de43c22da8bc35");
-  const provider =  new ethers.providers.WebSocketProvider('wss://polygon-mainnet.g.alchemy.com/v2/IJNymGPo47pkEyENUpN8hc1CVRosJfMv');
-  const uiPoolDataProviderAddress = '0xC69728f11E9E6127733751c8410432913123acf1';
-  const poolAddressProvider = '0xa97684ead0e402dC232d5A977953DF7ECBaB3CDb'
+  const provider =  new ethers.providers.WebSocketProvider('wss://eth-mainnet.g.alchemy.com/v2/U9D94i9IfuNroyIdgnYJIkroXz4U9yb4');
+  const uiPoolDataProviderAddress = '0x30375522F67a6308630d49A694ca1491fA2D3BC6';
+  const poolAddressProvider = '0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5'
   //figure out how to import this json
   const uiPoolDataProviderABI = JSON.parse(
     await readFile(
-      "src/uiPoolDataProviderAbi.json"
+      "src/uiPoolDataProviderAbiv2.json"
     )
   );
   

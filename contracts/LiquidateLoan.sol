@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: agpl-3.0
 pragma solidity 0.6.12;
 
-import { FlashLoanReceiverBase } from "FlashLoanReceiverBase.sol";
-import { ILendingPool, ILendingPoolAddressesProvider, IERC20 } from "Interfaces.sol";
-import { SafeMath } from "Libraries.sol";
+import { FlashLoanReceiverBase } from "./FlashLoanReceiverBase.sol";
+import { ILendingPool, ILendingPoolAddressesProvider, IERC20 } from "./Interfaces.sol";
+import { SafeMath } from "./Libraries.sol";
 import "./Ownable.sol";
 
-import "https://github.com/sushiswap/sushiswap/blob/master/contracts/uniswapv2/interfaces/IUniswapV2Router02.sol";
+import "https://github.com/Uniswap/v2-periphery/blob/master/contracts/interfaces/IUniswapV2Router02.sol";
 
 /*
 * A contract that liquidates an aave loan using a flash loan:

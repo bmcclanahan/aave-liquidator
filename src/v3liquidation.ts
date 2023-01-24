@@ -24,7 +24,7 @@ const healthFactorMax = 1 //liquidation can happen when less than 1
 const chain = ChainId.MAINNET;
 export var profit_threshold = .1 * (10**18) //in eth. A bonus below this will be ignored
 
-export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
+export const fetchV3UnhealthyLoans = async function fetchV3UnhealthyLoans(
   uiPoolDataProviderContract, poolAddressProvider, user_id
   ){
   var count=0;
@@ -47,6 +47,9 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
         users(first:1000, skip:${1000*count}, orderBy: id, orderDirection: desc, where: {${user_id_query}borrowedReservesCount_gt: 0}) {
           id
           borrowedReservesCount
+          eModeCategoryId {
+    			  id
+    			}
           collateralReserve:reserves(where: {currentATokenBalance_gt: 0}) {
             currentATokenBalance
             reserve{
@@ -56,11 +59,17 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
               borrowingEnabled
               utilizationRate
               symbol
+              name
               underlyingAsset
               price {
                 priceInEth
               }
               decimals
+              eMode {
+                id
+                liquidationThreshold
+                liquidationBonus
+              }
             }
           }
           borrowReserve: reserves(where: {currentTotalDebt_gt: 0}) {
@@ -71,6 +80,7 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
               borrowingEnabled
               utilizationRate
               symbol
+              name
               underlyingAsset
               price {
                 priceInEth
@@ -81,8 +91,9 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
         }
       }`
     })
+    console.log(res)
     const total_loans = res.data.data.users.length
-    const result = parseUsers(res.data.data, eth_price);
+    const result = parseUsers(res.data.data);
     const unhealthyLoans = result.unhealthyLoans;
     const all_loans = result.all_loans;
     console.log(`attempting to write ${all_loans.length} loans`);
@@ -121,7 +132,7 @@ function convertFieldsToBigNumber(item){
 }
 
 
-function parseUsers(payload, eth_price) {
+function parseUsers(payload) {
   var loans=[];
   var all_loans=[]; 
   payload.users.forEach((user, i) => {
@@ -143,15 +154,16 @@ function parseUsers(payload, eth_price) {
     
     user.borrowReserve.forEach((borrowReserve, i) => {
       //console.log('borrow reserev ', borrowReserve)
-      var priceInEth= borrowReserve.reserve.price.priceInEth
+      var priceInEth= borrowReserve.reserve.price.priceInEth // priceInEth really appears to be price in  USD * 10 ** 8
       var principalBorrowed = borrowReserve.currentTotalDebt
       //console.log('borrow add ', priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals))
-      totalBorrowed += priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals)
+      totalBorrowed += priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals) // total borrowed in USD * 10 ** 8 it appears
       if (principalBorrowed> max_borrowedPrincipal){
         max_borrowedSymbol = borrowReserve.reserve.symbol
         max_borrowedPrincipal = principalBorrowed
         max_borrowedPriceInEth = priceInEth
         max_borrowedDecimals = borrowReserve.reserve.decimals
+        max_borrowedName = borrowReserve.reseve.name
       }
     });
     user.collateralReserve.forEach((collateralReserve, i) => {
@@ -164,12 +176,23 @@ function parseUsers(payload, eth_price) {
       // )
 
       totalCollateral += priceInEth * principalATokenBalance / (10**collateralReserve.reserve.decimals)
-      totalCollateralThreshold += priceInEth * principalATokenBalance * (collateralReserve.reserve.reserveLiquidationThreshold/10000)/ (10**collateralReserve.reserve.decimals)
+      if(user.eModeCategoryId && collateralReserve.reserve.eMode && user.eModeCategoryId.id == collateralReserve.reserve.eMode.id){
+        totalCollateralThreshold += priceInEth * principalATokenBalance * (collateralReserve.reserve.eMode.liquidationThreshold/10000)/ (10**collateralReserve.reserve.decimals)
+      }
+      else {
+        totalCollateralThreshold += priceInEth * principalATokenBalance * (collateralReserve.reserve.reserveLiquidationThreshold/10000)/ (10**collateralReserve.reserve.decimals)
+      }
       if (collateralReserve.reserve.reserveLiquidationBonus > max_collateralBonus){
         max_collateralSymbol = collateralReserve.reserve.symbol
-        max_collateralBonus=collateralReserve.reserve.reserveLiquidationBonus
+        if(user.eModeCategoryId && collateralReserve.reserve.eMode && user.eModeCategoryId.id == collateralReserve.reserve.eMode.id){
+          max_collateralBonus=collateralReserve.reserve.eMode.liquidationBonus
+        }
+        else {
+          max_collateralBonus=collateralReserve.reserve.reserveLiquidationBonus
+        }
         max_collateralDecimals = collateralReserve.reserve.decimals
         max_collateralPriceInEth = priceInEth
+        max_collateralName = collateralReserve.reserve.name
       }
       // if (user.id == '0xfee26a46856a93b2559d29bd2d80d3cf7d1ba24e'){
       //   console.log('total borrowed ', totalBorrowed, totalCollateral, totalCollateralThreshold, totalCollateralThreshold/totalCollateral)
@@ -183,6 +206,8 @@ function parseUsers(payload, eth_price) {
       "healthFactor"   :  healthFactor,
       "max_collateralSymbol" : max_collateralSymbol,
       "max_borrowedSymbol" : max_borrowedSymbol,
+      "max_collateralName": max_collateralName,
+      "max_borrowedName": max_borrowedName,
       "max_borrowedPrincipal" : max_borrowedPrincipal,
       "max_borrowedPriceInEth" : max_borrowedPriceInEth,
       "max_borrowedDecimals": max_borrowedDecimals,
@@ -193,7 +218,7 @@ function parseUsers(payload, eth_price) {
       "total_collateral_threshold": totalCollateralThreshold,
       "total_borrowed":  totalBorrowed, //! double check profit calculation,
       //"profit_potentialInEth": TOKEN_LIST[max_borrowedSymbol] ? max_borrowedPrincipal * allowedLiquidation * (max_collateralBonus-1) * max_borrowedPriceInEth / 10 ** TOKEN_LIST[max_borrowedSymbol].decimals : 0
-      "profit_potentialInDollars": max_borrowedSymbol && max_borrowedDecimals ? max_borrowedPrincipal * allowedLiquidation * (max_collateralBonus/10000-1) * max_borrowedPriceInEth / 10 ** (max_borrowedDecimals + 18) * eth_price : 0
+      "profit_potentialInDollars": max_borrowedSymbol && max_borrowedDecimals ? max_borrowedPrincipal * allowedLiquidation * (max_collateralBonus/10000-1) * max_borrowedPriceInEth / 10 ** (max_borrowedDecimals + 8) : 0
     }
     if (healthFactor<=healthFactorMax) {
       loans.push(borrowingInfo)
@@ -293,20 +318,16 @@ async function analyzeUnhealthy(
   for(let loan of loans){
     let currentTimestamp = parseInt(Date.now() / 1000);
     let [reservesData, marketReference] = await uiPoolDataProviderContract.getReservesData(poolAddressProvider)
-    console.log("reseve data ", loan.user_id);
-
     reservesData = reservesData.map(
       x => {
-        let item = {};
-        for(let key of Object.keys(x)){
-          if(key != 'eModeLabel' && key != 52){
-            item[key] = x[key];
-          }
+        let item = {
+          ...x
         }
         item.decimals = item.decimals.toNumber();
         return convertFieldsToBigNumber(item);
       }
     )
+
     const formattedReserves = formatReserves({
       reserves: reservesData,
       currentTimestamp,

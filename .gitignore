@@ -1,3 +1,5 @@
+.DS_Store
+.deps
 /properties/kovan.properties
 /bck
 /node_modules
