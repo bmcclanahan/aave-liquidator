@@ -38,7 +38,6 @@ async function getReserves(tokens:[Token,Token][], provider): Pair[] {
       return pairDetails
     }
     catch(e){
-        console.log("error getting pair data ", e)
       }
     }
   )
