@@ -104,7 +104,7 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
     if(unhealthyLoans.length>0) {
       await analyzeUnhealthy(
         uiPoolDataProviderContract, poolAddressProvider,
-        result.all_loans, eth_price, provider
+        result.unhealthyLoans, eth_price, provider
       );
     }
     break
