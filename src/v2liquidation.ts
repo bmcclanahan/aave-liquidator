@@ -22,7 +22,7 @@ const graphUrl = theGraphURL_v2_mainnet
 const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
 const chain = ChainId.MAINNET;
-export var profit_threshold = 1.0 // in USD
+export var profit_threshold = 5.0 // in USD
 export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
   uiPoolDataProviderContract, poolAddressProvider, provider, user_id
   ){
@@ -101,7 +101,8 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
 
     count++;
     console.log('sleeping for 5 seconds');
-    break
+    if(unhealthyLoans.length>0)
+      break
     //await sleep(5000);
   };
   
@@ -208,10 +209,9 @@ function parseUsers(payload, eth_price) {
 }
 async function liquidationProfits(loans, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider){
   for(let loan of loans){
-    console.log("sleeping ten seconds")
-    await sleep(10000)
     await liquidationProfit(loan, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider)
-    
+    console.log("sleeping five seconds")
+    await sleep(5000)
   }
 }
 

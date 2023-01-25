@@ -8,7 +8,7 @@ export enum PairState {
   INVALID
 }
 
-export async function usePairs(currencies: [Currency | undefined, Currency | undefined][], chainId : ChainId, provider): Pair[] {
+export async function usePairs(currencies: [Currency | undefined, Currency | undefined][], provider, chainId : ChainId): Pair[] {
 
 //convert to to wrapped tokens where needed
   const tokens =
