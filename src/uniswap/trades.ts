@@ -8,7 +8,7 @@ import { wrappedCurrency } from './utils/wrappedCurrency'
 
 //import { useUnsupportedTokens } from './Tokens'
 
-export async function useAllCommonPairs(token1?: Token, token2?: Token): Pair[] {
+export async function useAllCommonPairs(token1?: Token, token2?: Token, provider): Pair[] {
   const chainId = token1.chainId && token2.chainId  && token1.chainId == token2.chainId ? token1.chainId : undefined
 
   const bases: Token[] = chainId ? BASES_TO_CHECK_TRADES_AGAINST[chainId] : []
@@ -51,8 +51,7 @@ export async function useAllCommonPairs(token1?: Token, token2?: Token): Pair[] 
             return true
           })
       : []
-
-  const allPairs = await usePairs(allPairCombinations)
+  const allPairs = await usePairs(allPairCombinations, provider)
 
   // only pass along valid pairs, non-duplicated pairs
   return Object.values(
@@ -70,10 +69,9 @@ const MAX_HOPS = 3
 /**
  * Returns the best trade for the exact amount of tokens in to the given token out
  */
-export async function useTradeExactIn(tokenAmountIn?: TokenAmount, tokenOut?: Token): Trade | null {
-  const allowedPairs = await useAllCommonPairs(tokenAmountIn?.currency, tokenOut)
+export async function useTradeExactIn(tokenAmountIn?: TokenAmount, tokenOut?: Token, provider): Trade | null {
+  const allowedPairs = await useAllCommonPairs(tokenAmountIn?.currency, tokenOut, provider)
   //console.log(`allowed pairs ${JSON.stringify(allowedPairs,null,2)}`)
-
   const singleHopOnly = false
   if (tokenAmountIn && tokenOut && allowedPairs.length > 0) {
     if (singleHopOnly) {

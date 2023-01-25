@@ -22,10 +22,9 @@ const graphUrl = theGraphURL_v2_mainnet
 const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
 const chain = ChainId.MAINNET;
-export var profit_threshold = .1 * (10**18) //in eth. A bonus below this will be ignored
-
+export var profit_threshold = 1.0 // in USD
 export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
-  uiPoolDataProviderContract, poolAddressProvider, user_id
+  uiPoolDataProviderContract, poolAddressProvider, provider, user_id
   ){
   var count=0;
   var maxCount=6
@@ -96,17 +95,14 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
     }
     );
     console.log("loans written");
-    if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans);
+    if(unhealthyLoans.length>0) await liquidationProfits(unhealthyLoans, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider);
     if(total_loans>0) console.log(`Records:${total_loans} Unhealthy:${unhealthyLoans.length}`);
     console.log("analyzing unhealthy loans");
 
-    await analyzeUnhealthy(
-      uiPoolDataProviderContract, poolAddressProvider,
-      all_loans.filter(x => x.healthFactor < 1.0), eth_price
-    );
     count++;
     console.log('sleeping for 5 seconds');
-    await sleep(5000);
+    break
+    //await sleep(5000);
   };
   
 }
@@ -204,19 +200,22 @@ function parseUsers(payload, eth_price) {
 
   //filter out loans under a threshold that we know will not be profitable (liquidation_threshold)
   loans = loans.filter(loan => TOKEN_LIST[loan.max_borrowedSymbol]);
-  loans = loans.filter(loan => loan.profit_potentialInEth >= profit_threshold)
+  loans = loans.filter(loan => loan.profit_potentialInDollars >= profit_threshold)
   return {
     unhealthyLoans: loans,
     all_loans
   };
 }
-async function liquidationProfits(loans){
-  loans.map(async (loan) => {
-     liquidationProfit(loan)
-     })
+async function liquidationProfits(loans, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider){
+  for(let loan of loans){
+    console.log("sleeping ten seconds")
+    await sleep(10000)
+    await liquidationProfit(loan, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider)
+    
+  }
 }
 
-async function liquidationProfit(loan){
+async function liquidationProfit(loan, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider){
   //flash loan fee
   if(TOKEN_LIST[loan.max_collateralSymbol] && TOKEN_LIST[loan.max_borrowedSymbol])
   {
@@ -229,7 +228,7 @@ async function liquidationProfit(loan){
     var flashLoanAmountInEth_plusBonus = percentBigInt(flashLoanAmountInEth,loan.max_collateralBonus) //add the bonus
     var collateralTokensFromPayout  = flashLoanAmountInEth_plusBonus * BigInt(10 ** loan.max_collateralDecimals) / BigInt(loan.max_collateralPriceInEth) //this is the amount of tokens that will be received as payment for liquidation and then will need to be swapped back to token of the flashloan
     var fromTokenAmount = new TokenAmount(TOKEN_LIST[loan.max_collateralSymbol], collateralTokensFromPayout)// this is the number of coins to trade (should have many 0's)
-    var bestTrade = await useTradeExactIn(fromTokenAmount,TOKEN_LIST[loan.max_borrowedSymbol])
+    var bestTrade = await useTradeExactIn(fromTokenAmount,TOKEN_LIST[loan.max_borrowedSymbol], provider)
     //debt tokens after swap
     var minimumTokensAfterSwap = bestTrade ? (BigInt(bestTrade.outputAmount.numerator) * BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)) / BigInt(bestTrade.outputAmount.denominator) : BigInt(0)
 
@@ -241,6 +240,12 @@ async function liquidationProfit(loan){
     var profitInEth = profitInBorrowCurrency * BigInt(loan.max_borrowedPriceInEth) / BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)
     var profitInEthAfterGas = (profitInEth)  - gasFee
 
+    console.log("profit here ", profitInEthAfterGas )
+    loan.profitAfterSwapUSD = Number(profitInEthAfterGas)/(10 ** 18) * eth_price
+    await analyzeUnhealthy(
+      uiPoolDataProviderContract, poolAddressProvider,
+      [loan], eth_price
+    );
     if (profitInEthAfterGas>0.1)
     {
       console.log("-------------------------------")
@@ -256,7 +261,7 @@ async function liquidationProfit(loan){
       console.log(`gasFee ${gasFee}`)
       console.log(`profitInEthAfterGas ${Number(profitInEthAfterGas)/(10 ** 18)}eth`)
     }
-    
+    return true;
       //console.log(`user_ID:${loan.user_id} HealthFactor ${loan.healthFactor.toFixed(2)} allowedLiquidation ${flashLoanAmount.toFixed(2)} ${loan.max_collateralSymbol}->${loan.max_borrowedSymbol}` )
       //console.log(`minimumTokensAfterSwap ${minimumTokensAfterSwap} flashLoanCost ${flashLoanCost} gasFee ${gasFee} profit ${profit.toFixed(2)}`)
   }
@@ -405,7 +410,8 @@ async function analyzeUnhealthy(
       "graph health factor: ", loan.healthFactor.toFixed(2),
       "contract health factor: ", parseFloat(userData.healthFactor).toFixed(2),
       "updated contract health factor", result.all_loans[0].healthFactor.toFixed(2),
-      "potential profit: $", loan.profit_potentialInDollars, // priceInEth really appears to be price in  USD * 10 ** 8
+      "potential profit: $", loan.profit_potentialInDollars.toFixed(2), // priceInEth really appears to be price in  USD * 10 ** 8
+      "profit after swap: $", loan.profitAfterSwapUSD? loan.profitAfterSwapUSD.toFixed(4): undefined,
       "collateral bonus: ", loan.max_collateralBonus,
       "max borrowed principal: ", loan.max_borrowedPrincipal / 10 ** loan.max_borrowedDecimals,
       "max borrowed price in eth: ", loan.max_borrowedPriceInEth,

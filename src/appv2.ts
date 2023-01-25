@@ -59,7 +59,7 @@ async function delayedFetchUnhealthyLoans(){
     console.log(`gas cost ${gas_cost}`)
     console.log("fetching loans")
 
-    fetchV2UnhealthyLoans(uiPoolDataProviderContract, poolAddressProvider);
+    fetchV2UnhealthyLoans(uiPoolDataProviderContract, poolAddressProvider, provider);
     getGas();
     await sleep(60000);
   }

@@ -8,7 +8,7 @@ export enum PairState {
   INVALID
 }
 
-export async function usePairs(currencies: [Currency | undefined, Currency | undefined][], chainId : ChainId): Pair[] {
+export async function usePairs(currencies: [Currency | undefined, Currency | undefined][], chainId : ChainId, provider): Pair[] {
 
 //convert to to wrapped tokens where needed
   const tokens =
@@ -17,7 +17,7 @@ export async function usePairs(currencies: [Currency | undefined, Currency | und
         wrappedCurrency(currencyB, chainId)
       ])
 //convert to pairs and get their reserves
-  const reserves = await getReserves(tokens)
+  const reserves = await getReserves(tokens, provider)
   //filter out nulls
   const reserves_cleansed = reserves.filter(result => !!result )
   //console.log(`results ${JSON.stringify(reserves,null,2)}`)
@@ -28,17 +28,17 @@ export async function usePair(tokenA?: Currency, tokenB?: Currency): Pair[] {
   return usePairs([[tokenA, tokenB]])[0]
 }
 
-async function getReserves(tokens:[Token,Token][]): Pair[] {
+async function getReserves(tokens:[Token,Token][], provider): Pair[] {
   const results = await Promise.all(tokens.map(async([tokenA, tokenB]) => {
     if (tokenA && tokenB && tokenA.equals(tokenB)){
       return
     }
-    //console.log (`tokenA ${tokenA.symbol} tokenB ${tokenB.symbol}`)
     try {
-      const pairDetails = await Fetcher.fetchPairData(tokenA, tokenB)
+      const pairDetails = await Fetcher.fetchPairData(tokenA, tokenB, provider)
       return pairDetails
     }
     catch(e){
+        console.log("error getting pair data ", e)
       }
     }
   )
