@@ -62,6 +62,7 @@ async function delayedFetchUnhealthyLoans(){
     fetchV2UnhealthyLoans(uiPoolDataProviderContract, poolAddressProvider, provider);
     getGas();
     await sleep(60000);
+    break
   }
   //TODO calculate liquidation threshold daily
 

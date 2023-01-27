@@ -100,15 +100,14 @@ export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
     console.log("analyzing unhealthy loans");
 
     count++;
-    console.log('sleeping for 5 seconds');
     if(unhealthyLoans.length>0) {
       await analyzeUnhealthy(
         uiPoolDataProviderContract, poolAddressProvider,
         result.unhealthyLoans, eth_price, provider
       );
     }
-    break
-    //await sleep(5000);
+    console.log('sleeping for 5 seconds');
+    await sleep(5000);
   };
   
 }
@@ -216,8 +215,6 @@ function parseUsers(payload, eth_price) {
 async function liquidationProfits(loans, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider){
   for(let loan of loans){
     await liquidationProfit(loan, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider)
-    console.log("sleeping five seconds")
-    await sleep(5000)
   }
 }
 

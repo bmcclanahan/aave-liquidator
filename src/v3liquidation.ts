@@ -15,14 +15,14 @@ const fs = require('fs');
 
 
 //const theGraphURL_v2_kovan = 'https://api.thegraph.com/subgraphs/name/aave/protocol-v2-kovan'
-const theGraphURL_v2_mainnet = 'https://api.thegraph.com/subgraphs/name/aave/protocol-v2'
+//const theGraphURL_v2_mainnet = 'https://api.thegraph.com/subgraphs/name/aave/protocol-v2'
 //const theGraphURL_v2 = APP_CHAIN_ID == ChainId.MAINNET ? theGraphURL_v2_mainnet : theGraphURL_v2_kovan
-//const polygonGraphURL = 'https://api.thegraph.com/subgraphs/name/ronlv10/aave-v3-polygon'
-const graphUrl = theGraphURL_v2_mainnet
+const polygonGraphURL = 'https://api.thegraph.com/subgraphs/name/ronlv10/aave-v3-polygon'
+const graphUrl = polygonGraphURL
 const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
 const chain = ChainId.MAINNET;
-export var profit_threshold = .1 * (10**18) //in eth. A bonus below this will be ignored
+export var profit_threshold = 0 //in eth. A bonus below this will be ignored
 
 export const fetchV3UnhealthyLoans = async function fetchV3UnhealthyLoans(
   uiPoolDataProviderContract, poolAddressProvider, user_id
@@ -91,7 +91,6 @@ export const fetchV3UnhealthyLoans = async function fetchV3UnhealthyLoans(
         }
       }`
     })
-    console.log(res)
     const total_loans = res.data.data.users.length
     const result = parseUsers(res.data.data);
     const unhealthyLoans = result.unhealthyLoans;
@@ -107,13 +106,13 @@ export const fetchV3UnhealthyLoans = async function fetchV3UnhealthyLoans(
     }
     );
     console.log("loans written");
-    if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans);
+    //if(unhealthyLoans.length>0) liquidationProfits(unhealthyLoans);
     if(total_loans>0) console.log(`Records:${total_loans} Unhealthy:${unhealthyLoans.length}`);
     console.log("analyzing unhealthy loans");
 
     await analyzeUnhealthy(
       uiPoolDataProviderContract, poolAddressProvider,
-      all_loans.filter(x => x.healthFactor < 1.0), eth_price
+      unhealthyLoans, eth_price
     );
     count++;
     console.log('sleeping for 5 seconds');
@@ -154,16 +153,16 @@ function parseUsers(payload) {
     
     user.borrowReserve.forEach((borrowReserve, i) => {
       //console.log('borrow reserev ', borrowReserve)
-      var priceInEth= borrowReserve.reserve.price.priceInEth // priceInEth really appears to be price in  USD * 10 ** 8
+      var priceInEth = borrowReserve.reserve.price.priceInEth // priceInEth really appears to be price in  USD * 10 ** 8
       var principalBorrowed = borrowReserve.currentTotalDebt
       //console.log('borrow add ', priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals))
       totalBorrowed += priceInEth * principalBorrowed / (10**borrowReserve.reserve.decimals) // total borrowed in USD * 10 ** 8 it appears
-      if (principalBorrowed> max_borrowedPrincipal){
+      if (principalBorrowed > max_borrowedPrincipal){
         max_borrowedSymbol = borrowReserve.reserve.symbol
         max_borrowedPrincipal = principalBorrowed
         max_borrowedPriceInEth = priceInEth
         max_borrowedDecimals = borrowReserve.reserve.decimals
-        max_borrowedName = borrowReserve.reseve.name
+        max_borrowedName = borrowReserve.reserve.name
       }
     });
     user.collateralReserve.forEach((collateralReserve, i) => {
@@ -229,7 +228,10 @@ function parseUsers(payload) {
 
   //filter out loans under a threshold that we know will not be profitable (liquidation_threshold)
   loans = loans.filter(loan => TOKEN_LIST[loan.max_borrowedSymbol]);
-  loans = loans.filter(loan => loan.profit_potentialInEth >= profit_threshold)
+  loans = loans.filter(loan => loan.profit_potentialInDollars >= profit_threshold)
+  loans = loans.filter(loan => loan.healthFactor < 1)
+
+
   return {
     unhealthyLoans: loans,
     all_loans
@@ -423,14 +425,14 @@ async function analyzeUnhealthy(
     //console.log("userData ", userData);
     console.log(
       "user: ", loan.user_id,
-      "graph health factor: ", loan.healthFactor.toFixed(2),
-      "contract health factor: ", parseFloat(userData.healthFactor).toFixed(2),
-      "updated contract health factor", result.all_loans[0].healthFactor.toFixed(2),
-      "potential profit: $", loan.profit_potentialInDollars, // priceInEth really appears to be price in  USD * 10 ** 8
-      "collateral bonus: ", loan.max_collateralBonus,
-      "max borrowed principal: ", loan.max_borrowedPrincipal / 10 ** loan.max_borrowedDecimals,
-      "max borrowed price in eth: ", loan.max_borrowedPriceInEth,
-      "max borrowed symbol: ", loan.max_borrowedSymbol
+      "\ngraph health factor: ", loan.healthFactor.toFixed(2),
+      "\ncontract health factor: ", parseFloat(userData.healthFactor).toFixed(2),
+      "\nupdated contract health factor", result.all_loans[0].healthFactor.toFixed(2),
+      "\npotential profit: $", loan.profit_potentialInDollars, // priceInEth really appears to be price in  USD * 10 ** 8
+      "\ncollateral bonus: ", loan.max_collateralBonus,
+      "\nmax borrowed principal: ", loan.max_borrowedPrincipal / 10 ** loan.max_borrowedDecimals,
+      "\nmax borrowed price in eth: ", loan.max_borrowedPriceInEth,
+      "\nmax borrowed symbol: ", loan.max_borrowedSymbol
       //"total collateral: ", loan.total_collateral,
       //"total collateral threshold", loan.total_collateral_threshold,
       //"total borrowed: ", loan.total_borrowedloan
