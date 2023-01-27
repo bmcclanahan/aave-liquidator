@@ -22,7 +22,7 @@ const graphUrl = theGraphURL_v2_mainnet
 const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
 const chain = ChainId.MAINNET;
-export var profit_threshold = 1.0 // in USD
+export var profit_threshold = 10.0 // in USD
 export const fetchV2UnhealthyLoans = async function fetchV2UnhealthyLoans(
   uiPoolDataProviderContract, poolAddressProvider, provider, user_id
   ){
@@ -222,14 +222,14 @@ async function liquidationProfit(loan, eth_price, uiPoolDataProviderContract, po
   //flash loan fee
   if(TOKEN_LIST[loan.max_collateralSymbol] && TOKEN_LIST[loan.max_borrowedSymbol])
   {
-    const flashLoanAmount = percentBigInt(BigInt(loan.max_borrowedPrincipal), allowedLiquidation)
+    const flashLoanAmount = percentBigInt(BigInt(parseInt(loan.max_borrowedPrincipal)), allowedLiquidation)
     const flashLoanCost = percentBigInt(flashLoanAmount, FLASH_LOAN_FEE)
 
     //minimum amount of liquidated coins that will be paid out as profit
     //var flashLoanAmountInEth = flashLoanAmount * BigInt(loan.max_borrowedPriceInEth) / BigInt(10 ** TOKEN_LIST[loan.max_borrowedSymbol].decimals)
     var flashLoanAmountInEth = flashLoanAmount * BigInt(loan.max_borrowedPriceInEth) / BigInt(10 ** loan.max_borrowedDecimals)
     var flashLoanAmountInEth_plusBonus = percentBigInt(flashLoanAmountInEth,loan.max_collateralBonus) //add the bonus
-    var collateralTokensFromPayout  = flashLoanAmountInEth_plusBonus * BigInt(10 ** loan.max_collateralDecimals) / BigInt(loan.max_collateralPriceInEth) //this is the amount of tokens that will be received as payment for liquidation and then will need to be swapped back to token of the flashloan
+    var collateralTokensFromPayout  = flashLoanAmountInEth_plusBonus * BigInt(10 ** loan.max_collateralDecimals) / BigInt(parseInt(loan.max_collateralPriceInEth)) //this is the amount of tokens that will be received as payment for liquidation and then will need to be swapped back to token of the flashloan
     var fromTokenAmount = new TokenAmount(TOKEN_LIST[loan.max_collateralSymbol], collateralTokensFromPayout)// this is the number of coins to trade (should have many 0's)
     var bestTrade = await useTradeExactIn(fromTokenAmount,TOKEN_LIST[loan.max_borrowedSymbol], provider)
     //debt tokens after swap
@@ -403,11 +403,12 @@ async function analyzeUnhealthy(
       console.log(
         "health mismatch",
         "\ngraph health factor: ", loan.healthFactor.toFixed(2),
-        "\nconstract health factor: ", result.all_loans[0].healthFactor
+        "\contract health factor: ", result.all_loans[0].healthFactor
         )
     }
-    await liquidationProfits(result.all_loans, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider);
-    
+    else{
+      await liquidationProfits(result.all_loans, eth_price, uiPoolDataProviderContract, poolAddressProvider, provider);
+    }
     //console.log("formatted user data ", userSummary)
     
 

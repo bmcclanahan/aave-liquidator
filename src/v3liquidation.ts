@@ -22,7 +22,7 @@ const graphUrl = polygonGraphURL
 const allowedLiquidation = .5 //50% of a borrowed asset can be liquidated
 const healthFactorMax = 1 //liquidation can happen when less than 1
 const chain = ChainId.MAINNET;
-export var profit_threshold = 0 //in eth. A bonus below this will be ignored
+export var profit_threshold = 1 //in eth. A bonus below this will be ignored
 
 export const fetchV3UnhealthyLoans = async function fetchV3UnhealthyLoans(
   uiPoolDataProviderContract, poolAddressProvider, user_id
